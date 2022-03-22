@@ -121,12 +121,12 @@ export class Map extends Phaser.GameObjects.TileSprite {
     if (!forEdit) {
       // add the flag and create a circle object that will be used as its hitbox
       this.destroyables.push(
-        scene.add.image(this.mapData.flag.x, this.mapData.flag.y, 'flag').setDepth(config.layers.items),
+        scene.add.image(this.mapData.flag.x, this.invertY(this.mapData.flag.y), 'flag').setDepth(config.layers.items),
       );
       // we adjust the this.mapData.flag.x and FLAG_Y on the hitbox below a bit, so we position it closer to the hole, not the middle of the flag
       this.flagCircle = new Phaser.Geom.Circle(
         this.mapData.flag.x + FLAG_X_OFFSET,
-        this.mapData.flag.y + FLAG_Y_OFFSET,
+        this.invertY(this.mapData.flag.y) + FLAG_Y_OFFSET,
         FLAG_HITBOX_RADIUS,
       );
     }
@@ -161,6 +161,8 @@ export class Map extends Phaser.GameObjects.TileSprite {
     if (this.flagCircle.contains(x, y)) {
       return 'hole';
     }
+
+    // TODO location type is not working properly for rendered
 
     let grassMapPxAlpha;
     let sandMapPxAlpha;
@@ -235,10 +237,7 @@ export class Map extends Phaser.GameObjects.TileSprite {
   }
 
   renderTextures: { grass: Phaser.GameObjects.RenderTexture; sand: Phaser.GameObjects.RenderTexture };
-  renderedMapHeight: number;
-  renderedMapTopY: number;
   buildMasksFromDrawData(): void {
-    let topY = this.mapData.height;
     this.renderTextures = {
       grass: this.scene.add.renderTexture(0, 0, this.mapData.width, this.mapData.height),
       sand: this.scene.add.renderTexture(0, 0, this.mapData.width, this.mapData.height),
@@ -250,25 +249,30 @@ export class Map extends Phaser.GameObjects.TileSprite {
         .fillCircleShape(this.brushCircle[drawData.size])
         .setVisible(false);
 
+      const drawLayers = [];
+      const eraseLayers = [];
+      switch (drawData.color) {
+        case 'draw-grass':
+          drawLayers.push(this.renderTextures.grass);
+          eraseLayers.push(this.renderTextures.sand);
+          break;
+        case 'draw-sand':
+          drawLayers.push(this.renderTextures.grass);
+          drawLayers.push(this.renderTextures.sand);
+          break;
+        case 'draw-water':
+          eraseLayers.push(this.renderTextures.grass);
+          eraseLayers.push(this.renderTextures.sand);
+          break;
+      }
+
       drawData.strokes.forEach((stroke) => {
-        const points = this.getInterpolatedPosition(stroke.from, stroke.to, 30);
+        const invertedStroke = {
+          from: { x: stroke.from.x, y: this.invertY(stroke.from.y) },
+          to: { x: stroke.to.x, y: this.invertY(stroke.to.y) },
+        };
+        const points = this.getInterpolatedPosition(invertedStroke.from, invertedStroke.to, 30);
         points.forEach((p) => {
-          const drawLayers = [];
-          const eraseLayers = [];
-          switch (drawData.color) {
-            case 'draw-grass':
-              drawLayers.push(this.renderTextures.grass);
-              eraseLayers.push(this.renderTextures.sand);
-              break;
-            case 'draw-sand':
-              drawLayers.push(this.renderTextures.grass);
-              drawLayers.push(this.renderTextures.sand);
-              break;
-            case 'draw-water':
-              eraseLayers.push(this.renderTextures.grass);
-              eraseLayers.push(this.renderTextures.sand);
-              break;
-          }
           drawLayers.forEach((texture) => {
             texture.draw(
               this.brush,
@@ -277,7 +281,6 @@ export class Map extends Phaser.GameObjects.TileSprite {
               1,
               BLACK_COLOR,
             );
-            topY = Math.min(topY, p.y) - BRUSH_RADIUS_ARR[drawData.size];
           });
           eraseLayers.forEach((texture) =>
             texture.erase(
@@ -297,8 +300,9 @@ export class Map extends Phaser.GameObjects.TileSprite {
 
     this.renderTextures.grass.saveTexture(this.mapData.grassMask);
     this.renderTextures.sand.saveTexture(this.mapData.sandMask);
+  }
 
-    this.renderedMapHeight = this.mapData.height - topY;
-    this.renderedMapTopY = topY;
+  invertY(y: number): number {
+    return this.mapData.height - y;
   }
 }

@@ -19,13 +19,13 @@ const MAP_DATA: MapData = {
   sandMask: 'map-sand',
   flag: {
     x: 200,
-    y: 200,
+    y: 2800,
   },
   windmills: [
-    { x: 450, y: 2500 },
-    { x: 280, y: 300 },
+    { x: 450, y: 500 },
+    { x: 280, y: 2700 },
   ],
-  portals: [{ a: { x: 200, y: 450 }, b: { x: 500, y: 1500 } }],
+  portals: [{ a: { x: 200, y: 2550 }, b: { x: 500, y: 1500 } }],
 };
 
 const PAN_DURATION = 3000;
@@ -125,23 +125,32 @@ export class GameScene extends Phaser.Scene {
 
     this.addListeners();
 
-    this.cameras.main.setBounds(0, 0, 0, this.map.displayHeight + this.footer.displayHeight);
+    this.cameras.main.setBounds(
+      0,
+      0,
+      0,
+      Math.max(this.map.displayHeight + this.footer.displayHeight, getGameHeight(this)),
+    );
     //this.cameras.main.setBounds(0, this.map.renderedMapTopY, 0, this.map.renderedMapHeight + this.footer.displayHeight);
 
     this.scrollMapSprite = new ScrollMapSprite(this);
 
     this.windmills = [];
     this.mapData.windmills.forEach((coord) => {
-      this.windmills.push(new Windmill(this, coord.x, coord.y));
+      this.windmills.push(new Windmill(this, coord.x, this.invertY(coord.y)));
     });
 
     this.portals = [];
     this.mapData.portals.forEach((portalCoords) => {
-      if (portalCoords.a === undefined || portalCoords.b === undefined) {
+      const invertedPortalCoords = {
+        a: portalCoords.a ? { x: portalCoords.a.x, y: this.invertY(portalCoords.a.y) } : undefined,
+        b: portalCoords.b ? { x: portalCoords.b.x, y: this.invertY(portalCoords.b.y) } : undefined,
+      }
+      if (invertedPortalCoords.a === undefined || invertedPortalCoords.b === undefined) {
         return;
       }
-      this.portals.push(new Portal(this, portalCoords.a, portalCoords.b));
-      this.portals.push(new Portal(this, portalCoords.b, portalCoords.a));
+      this.portals.push(new Portal(this, invertedPortalCoords.a, invertedPortalCoords.b));
+      this.portals.push(new Portal(this, invertedPortalCoords.b, invertedPortalCoords.a));
     });
   }
 
@@ -272,6 +281,8 @@ export class GameScene extends Phaser.Scene {
   async onMove(evt: Phaser.Input.Pointer): Promise<void> {
     const coords = this.cameras.main.getWorldPoint(evt.x, evt.y);
 
+    console.log(await this.map.getLocationType(coords.x, coords.y));
+
     if (this.startSplashComplete && this.moving) {
       const isOnStartCircle = this.startCircle.contains(coords.x, coords.y);
       const type = await this.map.getLocationType(coords.x, coords.y);
@@ -392,5 +403,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
     return null;
+  }
+
+  invertY(y: number): number {
+    return this.mapData.height - y;
   }
 }

@@ -59,11 +59,6 @@ export class DrawScene extends Phaser.Scene {
   portalColors: Phaser.GameObjects.Graphics;
   portalColorIndex = 0;
   prevPointerCoords: xy;
-  minY: number;
-
-  checkMinY(y: number): void {
-    this.minY = Math.min(y, this.minY);
-  }
 
   constructor() {
     super(sceneConfig);
@@ -84,7 +79,6 @@ export class DrawScene extends Phaser.Scene {
       windmills: [],
       portals: [],
     };
-    this.minY = this.mapData.height;
 
     this.drawData = [];
     this.rtGrass = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
@@ -132,7 +126,6 @@ export class DrawScene extends Phaser.Scene {
           this.draggingObject.y = coords.y;
         } else if (this.isInDrawBounds(pointer)) {
           this.draw(pointer);
-          this.checkMinY(coords.y - BRUSH_RADIUS_ARR[this.size]);
         }
       }
     });
@@ -204,17 +197,19 @@ export class DrawScene extends Phaser.Scene {
       .setVisible(false);
   }
 
+  highestDrawnY = 0;
   draw(pointer: Phaser.Input.Pointer): void {
     const points = pointer.getInterpolatedPosition(30);
     const prevPositionCamera = this.cameras.main.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
     const positionCamera = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    
     const drawDataPoint: DrawData = {
       color: this.colors[this.color],
       size: this.size,
       strokes: [
         {
-          from: { x: Math.floor(prevPositionCamera.x), y: Math.floor(prevPositionCamera.y) },
-          to: { x: Math.floor(positionCamera.x), y: Math.floor(positionCamera.y) },
+          from: { x: Math.floor(prevPositionCamera.x), y: this.invertY(Math.floor(prevPositionCamera.y)) },
+          to: { x: Math.floor(positionCamera.x), y: this.invertY(Math.floor(positionCamera.y)) },
         },
       ],
     };
@@ -225,25 +220,30 @@ export class DrawScene extends Phaser.Scene {
       this.drawData.push(drawDataPoint);
     }
 
+    const drawLayers = [];
+    const eraseLayers = [];
+    switch (this.colors[this.color]) {
+      case 'draw-grass':
+        drawLayers.push(this.rtGrass);
+        eraseLayers.push(this.rtSand);
+        break;
+      case 'draw-sand':
+        drawLayers.push(this.rtGrass);
+        drawLayers.push(this.rtSand);
+        break;
+      case 'draw-water':
+        eraseLayers.push(this.rtGrass);
+        eraseLayers.push(this.rtSand);
+        break;
+    }
+
+    if (drawLayers.length > 0) {
+      this.highestDrawnY = Math.max(this.highestDrawnY, this.invertY(Math.floor(positionCamera.y)) + BRUSH_RADIUS_ARR[this.size]);
+    }
+    
     points
       .map((p) => this.cameras.main.getWorldPoint(p.x, p.y))
       .forEach((p) => {
-        const drawLayers = [];
-        const eraseLayers = [];
-        switch (this.colors[this.color]) {
-          case 'draw-grass':
-            drawLayers.push(this.rtGrass);
-            eraseLayers.push(this.rtSand);
-            break;
-          case 'draw-sand':
-            drawLayers.push(this.rtGrass);
-            drawLayers.push(this.rtSand);
-            break;
-          case 'draw-water':
-            eraseLayers.push(this.rtGrass);
-            eraseLayers.push(this.rtSand);
-            break;
-        }
         drawLayers.forEach((texture) =>
           texture.draw(
             this.brush,
@@ -341,12 +341,11 @@ export class DrawScene extends Phaser.Scene {
 
   processDropEvent(texture: string, pointer: Phaser.Input.Pointer): void {
     const coords = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    this.checkMinY(coords.y);
     switch (texture) {
       case 'draw-windmill':
         this.mapData.windmills.push({
           x: coords.x,
-          y: coords.y,
+          y: this.invertY(coords.y),
         });
         this.setWindmills();
         break;
@@ -359,6 +358,10 @@ export class DrawScene extends Phaser.Scene {
     }
   }
 
+  invertY(y: number) {
+    return this.mapData.height - y;
+  }
+
   setWindmills(): void {
     this.windmills.forEach((windmill) => {
       windmill.destroy();
@@ -367,7 +370,7 @@ export class DrawScene extends Phaser.Scene {
     this.removeDraggableObjectsByTexture('windmill-tower');
     let i = 0;
     this.mapData.windmills.forEach((coord) => {
-      const o = new Windmill(this, coord.x, coord.y);
+      const o = new Windmill(this, coord.x, this.invertY(coord.y));
       this.windmills.push(o);
       this.draggableMapObjects.push({
         object: this.windmills[i].getTower(),
@@ -383,7 +386,10 @@ export class DrawScene extends Phaser.Scene {
   }
 
   setFlagCoords(pointer: Phaser.Input.Pointer, realWorldPoint: xy): void {
-    this.mapData.flag = realWorldPoint;
+    this.mapData.flag = {
+      ...realWorldPoint,
+      y: this.invertY(realWorldPoint.y),
+    };
     if (this.flag) {
       this.flag.destroy();
     }
@@ -426,10 +432,13 @@ export class DrawScene extends Phaser.Scene {
       }
     }
 
-    portal[portalKey] = realWorldPoint;
+    portal[portalKey] = {
+      ...realWorldPoint,
+      y: this.invertY(realWorldPoint.y),
+    };
 
     this.setPortals();
-    console.log(this.mapData.portals);
+    // console.log(this.mapData.portals);
   }
 
   setPortals(): void {
@@ -443,12 +452,16 @@ export class DrawScene extends Phaser.Scene {
     this.removeDraggableObjectsByTexture('hole');
     this.portals = [];
     this.mapData.portals.forEach((portalCoords) => {
-      const portals: { a?: Portal; b?: Portal } = {};
-      if (portalCoords.a) {
-        portals.a = new Portal(this, portalCoords.a, portalCoords.b);
+      const invertedPortalCoords = {
+        a: portalCoords.a ? { x: portalCoords.a.x, y: this.invertY(portalCoords.a.y) } : undefined,
+        b: portalCoords.b ? { x: portalCoords.b.x, y: this.invertY(portalCoords.b.y) } : undefined,
       }
-      if (portalCoords.b) {
-        portals.b = new Portal(this, portalCoords.b, portalCoords.a);
+      const portals: { a?: Portal; b?: Portal } = {};
+      if (invertedPortalCoords.a) {
+        portals.a = new Portal(this, invertedPortalCoords.a, invertedPortalCoords.b);
+      }
+      if (invertedPortalCoords.b) {
+        portals.b = new Portal(this, invertedPortalCoords.b, invertedPortalCoords.a);
       }
 
       this.decoratePortals(portals);
@@ -460,7 +473,7 @@ export class DrawScene extends Phaser.Scene {
           object: portal,
           pointerdown: () => {
             this.draggingPortal = portal;
-            this.draggingPortalCoords = portalCoords;
+            this.draggingPortalCoords = invertedPortalCoords;
             this.draggingPortalKey = portalKey;
             this.portalToolTouchEvent({ x: portal.x, y: portal.y }, true);
             portalCoords[portalKey] = undefined;
@@ -493,13 +506,51 @@ export class DrawScene extends Phaser.Scene {
     this.portalColorIndex = (this.portalColorIndex + 1) % PORTAL_COLOR_INDICATORS.length;
   }
 
-  async playTest(): Promise<void> {
+  playTest(): Promise<void> {
     if (this.mapData.flag === undefined) {
       alert('no hole');
       return;
     }
 
-    this.scene.start('Game', { ...this.mapData, drawData: this.drawData });
+    const newMapData: MapData = { ...this.mapData, height: this.getMapHeight(), drawData: this.drawData };
+    this.scene.start('Game', newMapData);
+  }
+
+  getMapHeight() {
+    let mapHeight = this.highestDrawnY;
+
+    this.mapData.portals.forEach(portalPair => {
+      if (portalPair.a) {
+        mapHeight = Math.max(mapHeight, portalPair.a.y);
+      }
+      if (portalPair.b) {
+        mapHeight = Math.max(mapHeight, portalPair.b.y);
+      }
+    });
+    if (this.mapData.flag) {
+      mapHeight = Math.max(mapHeight, this.mapData.flag.y);
+    }
+    this.mapData.windmills.forEach(coords => mapHeight = Math.max(mapHeight, coords.y));
+
+    // TODO at some point, may want to scan to get a more accurate map height... for instance what if they draw something at top then erase it... 
+    // for (let y = 0; y < this.invertY(mapHeight); y += 15) {
+    //   const snapshotPromises = [];
+    //   for (let x = 0; x < this.mapData.width; x++) {
+    //     snapshotPromises.push(new Promise<any>((resolve) => 
+    //       this.rtGrass.snapshotPixel(x, y, (px: Phaser.Display.Color) => resolve(px.alpha))
+    //     ));
+    //     snapshotPromises.push(new Promise<any>((resolve) => 
+    //       this.rtSand.snapshotPixel(x, y, (px: Phaser.Display.Color) => resolve(px.alpha))
+    //     ));
+    //   }
+    //   const snapshotsForRow = await Promise.all(snapshotPromises);
+    //   if (snapshotsForRow.some(x => x === 1)) {
+    //     mapHeight = this.invertY(y);
+    //     break;
+    //   }
+    // }
+
+    return mapHeight;
   }
 
   update(time: number, delta: number): void {

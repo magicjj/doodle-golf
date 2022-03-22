@@ -1,6 +1,6 @@
 import config from '../../common/config';
 
-const FAN_STEP = 2;
+const FAN_MILLIS_PER_ROTATION = 400;
 const HITBOX_STEP = 5;
 const FAN_RADIUS = 325;
 const SHOW_HBs = false;
@@ -69,8 +69,6 @@ export class Windmill {
   }
 
   update(time: number, delta: number): void {
-    const FAN_MILLIS_PER_ROTATION = 400;
-
     this.fan.angle = Math.floor((90 / FAN_MILLIS_PER_ROTATION) * (time % FAN_MILLIS_PER_ROTATION));
     let angle90 = (this.fan.angle + 5) % 90;
     if (angle90 < 0) {
@@ -78,10 +76,6 @@ export class Windmill {
     }
     this.activeAngleIndex = Math.floor(angle90 / HITBOX_STEP) * HITBOX_STEP;
     if (SHOW_HBs) {
-      console.log('fan angle: ' + this.fan.angle);
-      console.log('fan angle mod 90: ' + angle90);
-      console.log('calc index: ' + this.activeAngleIndex);
-
       if (this.hitboxGraphics) {
         this.hitboxGraphics.destroy();
       }
