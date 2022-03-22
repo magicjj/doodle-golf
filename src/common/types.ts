@@ -3,11 +3,18 @@ export interface xy {
   y: number;
 }
 
+export interface DrawData {
+  color: string;
+  size: number;
+  strokes: { from: xy; to: xy }[];
+}
+
 export interface MapData {
   title: string;
   subtitle: string;
-  grassMask: string;
-  sandMask: string;
+  drawData?: DrawData[];
+  grassMask?: string;
+  sandMask?: string;
   flag: xy;
   windmills: xy[];
   portals: { a: xy; b: xy; id?: number }[];
@@ -15,4 +22,10 @@ export interface MapData {
   height: number;
   grassMaskImage?: HTMLImageElement;
   sandMaskImage?: HTMLImageElement;
+}
+
+export interface MapMasks {
+  grass?: Phaser.Display.Masks.BitmapMask;
+  grassBase?: Phaser.Display.Masks.BitmapMask;
+  sand?: Phaser.Display.Masks.BitmapMask;
 }

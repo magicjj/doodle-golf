@@ -10,7 +10,7 @@ import { Portal } from './portal';
 import { MapData, xy } from '../../common/types';
 
 // default course details
-const MAP_DATA = {
+const MAP_DATA: MapData = {
   title: 'Hole 1',
   subtitle: 'The Basics',
   width: 750,
@@ -126,6 +126,7 @@ export class GameScene extends Phaser.Scene {
     this.addListeners();
 
     this.cameras.main.setBounds(0, 0, 0, this.map.displayHeight + this.footer.displayHeight);
+    //this.cameras.main.setBounds(0, this.map.renderedMapTopY, 0, this.map.renderedMapHeight + this.footer.displayHeight);
 
     this.scrollMapSprite = new ScrollMapSprite(this);
 
@@ -170,7 +171,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         // start this interval in addition to triggering position check on move.
-        // otherwise position only gets checked while the finger is moving
+        // otherwise position only gets checked while the finger is moving (so things like windmills don't collide unless they are moving)
         positionCheckInterval = setInterval(() => this.onMove(this.input.activePointer), POSITION_CHECK_COOLDOWN);
       }
     });
@@ -244,7 +245,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(config.layers.cloudCover + 1); // adding 1 so it goes over windmills
   }
 
-  public update(): void {
+  public update(time: number, delta: number): void {
     if (this.finalTime) {
       this.footer.setTime(this.finalTime);
     } else if (this.startTime) {
@@ -265,14 +266,15 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    this.windmills.forEach((windmill) => windmill.update());
+    this.windmills.forEach((windmill) => windmill.update(time, delta));
   }
 
-  onMove(evt: Phaser.Input.Pointer): void {
+  async onMove(evt: Phaser.Input.Pointer): Promise<void> {
     const coords = this.cameras.main.getWorldPoint(evt.x, evt.y);
+
     if (this.startSplashComplete && this.moving) {
       const isOnStartCircle = this.startCircle.contains(coords.x, coords.y);
-      const type = this.map.getLocationType(coords.x, coords.y);
+      const type = await this.map.getLocationType(coords.x, coords.y);
 
       this.handleSandPenalty(type);
 

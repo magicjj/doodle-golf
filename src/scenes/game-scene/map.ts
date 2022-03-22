@@ -1,14 +1,27 @@
-import { Updateable } from '../../common/updateable';
 import { CloudSprite } from './cloud-sprite';
 import { WaterSprite } from './water-sprite';
 import config from '../../common/config';
-import { MapData } from '../../common/types';
+import { MapData, MapMasks, xy } from '../../common/types';
 
 const FLAG_HITBOX_RADIUS = 30;
 const FLAG_X_OFFSET = 10;
 const FLAG_Y_OFFSET = 50;
 
-export class Map extends Phaser.GameObjects.TileSprite implements Updateable {
+// TODO this stuff and COLORS and other draw logic should be centralized, currently stuff duplicated here and in draw-scene
+const BLACK_COLOR = 0x000000;
+const BRUSH_RADIUS_SM = 30;
+const BRUSH_RADIUS_MD = 60;
+const BRUSH_RADIUS_LG = 90;
+const BRUSH_RADIUS_ARR = [BRUSH_RADIUS_SM, BRUSH_RADIUS_MD, BRUSH_RADIUS_LG];
+
+export class Map extends Phaser.GameObjects.TileSprite {
+  brush: Phaser.GameObjects.Graphics;
+  brushCircle = [
+    new Phaser.Geom.Circle(BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM),
+    new Phaser.Geom.Circle(BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD),
+    new Phaser.Geom.Circle(BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG),
+  ];
+
   waterBg: Phaser.GameObjects.Graphics;
   brownT: Phaser.GameObjects.Graphics;
   brownR: Phaser.GameObjects.Graphics;
@@ -23,55 +36,51 @@ export class Map extends Phaser.GameObjects.TileSprite implements Updateable {
   constructor(scene: Phaser.Scene, private mapData: MapData, private forEdit = false) {
     super(scene, 0, 0, mapData.width, mapData.height, 'grass-tile');
 
-    // check for image!
-    if (mapData.grassMaskImage) {
-      if (!scene.textures.checkKey(mapData.grassMask)) {
-        scene.textures.get(mapData.grassMask).destroy();
-      }
-      scene.textures.addImage(mapData.grassMask, mapData.grassMaskImage);
-    }
-    if (mapData.sandMaskImage) {
-      if (!scene.textures.checkKey(mapData.sandMask)) {
-        scene.textures.get(mapData.sandMask).destroy();
-      }
-      scene.textures.addImage(mapData.sandMask, mapData.sandMaskImage);
-    }
 
     this.setOrigin(0, 0);
     this.setDepth(config.layers.grass);
     scene.add.existing(this);
 
-    // add map mask to grass
+    if (mapData.drawData) {
+      // rebuild maps from draw data
+      this.buildMasksFromDrawData();
+    }
+    if (!mapData.grassMask || !mapData.sandMask) {
+      alert('invalid map');
+    }
+
+    const masks: MapMasks = {};
     const grassMaskImage = scene.add.image(0, 0, mapData.grassMask).setOrigin(0, 0).setVisible(false);
-    const grassMask = new Phaser.Display.Masks.BitmapMask(scene, grassMaskImage);
-    this.setMask(grassMask);
-    this.destroyables.push(grassMaskImage);
-    this.destroyables.push(grassMask);
+    const grassBaseMaskImage = scene.add.image(0, 20, mapData.grassMask).setOrigin(0, 0).setVisible(false);
+    const sandMaskImage = scene.add.image(0, 0, mapData.sandMask).setOrigin(0, 0).setVisible(false);
+    masks.grass = new Phaser.Display.Masks.BitmapMask(scene, grassMaskImage);
+    masks.grassBase = new Phaser.Display.Masks.BitmapMask(scene, grassBaseMaskImage);
+    masks.sand = new Phaser.Display.Masks.BitmapMask(scene, sandMaskImage);
+
+    // add map mask to grass
+    this.setMask(masks.grass);
+    this.destroyables.push(masks.grass.mainTexture);
+    this.destroyables.push(masks.grass);
 
     // add mask for sand
-    const sandMaskImage = scene.add.image(0, 0, mapData.sandMask).setOrigin(0, 0).setVisible(false);
-    const sandMask = new Phaser.Display.Masks.BitmapMask(scene, sandMaskImage);
     this.sand = scene.add
       .tileSprite(0, 0, mapData.width, mapData.height, 'sand-tile')
-      .setMask(sandMask)
+      .setMask(masks.sand)
       .setOrigin(0, 0)
       .setDepth(config.layers.sand);
-    this.destroyables.push(sandMaskImage);
-    this.destroyables.push(sandMask);
+    this.destroyables.push(masks.sand.mainTexture);
+    this.destroyables.push(masks.sand);
     this.destroyables.push(this.sand);
 
     this.createGrassOutline();
 
-    const grassBaseMaskImage = scene.add.image(0, 20, this.mapData.grassMask).setOrigin(0, 0).setVisible(false);
-    const grassBaseMask = new Phaser.Display.Masks.BitmapMask(scene, grassBaseMaskImage);
     this.grassBase = scene.add
       .tileSprite(0, 0, mapData.width, mapData.height, 'grass-base')
       .setOrigin(0, 0)
       .setDepth(config.layers.grass - 2)
-      .setMask(grassBaseMask);
-    this.destroyables.push(grassBaseMaskImage);
-    this.destroyables.push(grassBaseMask);
-    this.destroyables.push(this.grassBase);
+      .setMask(masks.grassBase);
+    this.destroyables.push(masks.grassBase.mainTexture);
+    this.destroyables.push(masks.grassBase);
 
     this.waterBg = scene.add
       .graphics()
@@ -148,23 +157,37 @@ export class Map extends Phaser.GameObjects.TileSprite implements Updateable {
     return ret;
   }
 
-  updateMe(): void {}
-
-  getLocationType(x: number, y: number): string {
-    const sandMapPx = this.scene.textures.getPixel(x, y, this.mapData.sandMask);
-    const grassMapPx = this.scene.textures.getPixel(x, y, this.mapData.grassMask);
-
-    //console.log(this.flagCircle.contains(x, y), sandMapPx.alpha, grassMapPx.alpha);
-
+  async getLocationType(x: number, y: number): Promise<string> {
     if (this.flagCircle.contains(x, y)) {
       return 'hole';
     }
 
-    if (sandMapPx.alpha === 255) {
+    let grassMapPxAlpha;
+    let sandMapPxAlpha;
+
+    if (!this.renderTextures) {
+      grassMapPxAlpha = this.scene.textures.getPixel(x, y, this.mapData.grassMask).alpha === 0 ? 0 : 1;
+      sandMapPxAlpha = this.scene.textures.getPixel(x, y, this.mapData.sandMask).alpha === 0 ? 0 : 1;
+    } else {
+      grassMapPxAlpha = (
+        await new Promise<any>((resolve) => {
+          this.renderTextures.grass.snapshotPixel(x, y, (color) => resolve(color));
+        })
+      ).a;
+      sandMapPxAlpha = (
+        await new Promise<any>((resolve) => {
+          this.renderTextures.sand.snapshotPixel(x, y, (color) => resolve(color));
+        })
+      ).a;
+    }
+
+    console.log(grassMapPxAlpha, sandMapPxAlpha);
+
+    if (sandMapPxAlpha === 1) {
       return 'sand';
     }
 
-    if (grassMapPx.alpha === 255) {
+    if (grassMapPxAlpha === 1) {
       return 'grass';
     }
 
@@ -176,11 +199,106 @@ export class Map extends Phaser.GameObjects.TileSprite implements Updateable {
     this.destroy();
   }
 
-  addToHeight(px: number) {
+  // TODO not used atm...
+  addToHeight(px: number): void {
     this.positionables.forEach((o) => {
       if (o.y) {
         o.y += px;
       }
     });
+  }
+
+  getInterpolatedPosition(from: xy, to: xy, steps?: number, out?: xy[]): xy[] {
+    if (steps === undefined) {
+      steps = 10;
+    }
+    if (out === undefined) {
+      out = [];
+    }
+
+    const prevX = from.x;
+    const prevY = from.y;
+
+    const curX = to.x;
+    const curY = to.y;
+
+    for (let i = 0; i < steps; i++) {
+      const t = (1 / steps) * i;
+
+      out[i] = {
+        x: Phaser.Math.Interpolation.SmoothStep(t, prevX, curX),
+        y: Phaser.Math.Interpolation.SmoothStep(t, prevY, curY),
+      };
+    }
+
+    return out;
+  }
+
+  renderTextures: { grass: Phaser.GameObjects.RenderTexture; sand: Phaser.GameObjects.RenderTexture };
+  renderedMapHeight: number;
+  renderedMapTopY: number;
+  buildMasksFromDrawData(): void {
+    let topY = this.mapData.height;
+    this.renderTextures = {
+      grass: this.scene.add.renderTexture(0, 0, this.mapData.width, this.mapData.height),
+      sand: this.scene.add.renderTexture(0, 0, this.mapData.width, this.mapData.height),
+    };
+    this.mapData.drawData.forEach((drawData) => {
+      this.brush = this.scene.add
+        .graphics()
+        .fillStyle(BLACK_COLOR, 1)
+        .fillCircleShape(this.brushCircle[drawData.size])
+        .setVisible(false);
+
+      drawData.strokes.forEach((stroke) => {
+        const points = this.getInterpolatedPosition(stroke.from, stroke.to, 30);
+        points.forEach((p) => {
+          const drawLayers = [];
+          const eraseLayers = [];
+          switch (drawData.color) {
+            case 'draw-grass':
+              drawLayers.push(this.renderTextures.grass);
+              eraseLayers.push(this.renderTextures.sand);
+              break;
+            case 'draw-sand':
+              drawLayers.push(this.renderTextures.grass);
+              drawLayers.push(this.renderTextures.sand);
+              break;
+            case 'draw-water':
+              eraseLayers.push(this.renderTextures.grass);
+              eraseLayers.push(this.renderTextures.sand);
+              break;
+          }
+          drawLayers.forEach((texture) => {
+            texture.draw(
+              this.brush,
+              p.x - BRUSH_RADIUS_ARR[drawData.size] / 2,
+              p.y - BRUSH_RADIUS_ARR[drawData.size] / 2,
+              1,
+              BLACK_COLOR,
+            );
+            topY = Math.min(topY, p.y) - BRUSH_RADIUS_ARR[drawData.size];
+          });
+          eraseLayers.forEach((texture) =>
+            texture.erase(
+              this.brush,
+              p.x - BRUSH_RADIUS_ARR[drawData.size] / 2,
+              p.y - BRUSH_RADIUS_ARR[drawData.size] / 2,
+              1,
+              BLACK_COLOR,
+            ),
+          );
+        });
+      });
+    });
+
+    this.mapData.grassMask = 'grass-render-texture';
+    this.mapData.sandMask = 'sand-render-texture';
+
+    this.renderTextures.grass.saveTexture(this.mapData.grassMask);
+    this.renderTextures.sand.saveTexture(this.mapData.sandMask);
+
+    this.renderedMapHeight = this.mapData.height - topY;
+    this.renderedMapTopY = topY;
   }
 }

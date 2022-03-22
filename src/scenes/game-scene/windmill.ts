@@ -68,8 +68,10 @@ export class Windmill {
     return (deg * Math.PI) / 180;
   }
 
-  update(): void {
-    this.fan.angle += FAN_STEP;
+  update(time: number, delta: number): void {
+    const FAN_MILLIS_PER_ROTATION = 400;
+
+    this.fan.angle = Math.floor((90 / FAN_MILLIS_PER_ROTATION) * (time % FAN_MILLIS_PER_ROTATION));
     let angle90 = (this.fan.angle + 5) % 90;
     if (angle90 < 0) {
       angle90 += 90;

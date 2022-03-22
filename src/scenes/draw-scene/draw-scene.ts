@@ -2,7 +2,7 @@ import { getGameHeight, getGameWidth } from '../../helpers';
 import { MenuButton } from '../../ui/menu-button';
 import { Map } from '../game-scene/map';
 import config from '../../common/config';
-import { MapData, xy } from '../../common/types';
+import { DrawData, MapData, xy } from '../../common/types';
 import { Tool } from './tool';
 import { StartCircle } from '../game-scene/start-circle';
 import { Windmill } from '../game-scene/windmill';
@@ -27,6 +27,7 @@ const PORTAL_COLOR_INDICATORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xcc00f
  */
 export class DrawScene extends Phaser.Scene {
   mapData: MapData;
+  drawData: DrawData[];
   rtGrass: Phaser.GameObjects.RenderTexture;
   rtSand: Phaser.GameObjects.RenderTexture;
   brush: Phaser.GameObjects.Graphics;
@@ -60,7 +61,7 @@ export class DrawScene extends Phaser.Scene {
   prevPointerCoords: xy;
   minY: number;
 
-  checkMinY(y: number) {
+  checkMinY(y: number): void {
     this.minY = Math.min(y, this.minY);
   }
 
@@ -77,14 +78,15 @@ export class DrawScene extends Phaser.Scene {
       width: 750,
       //height: getGameHeight(this) * 2,
       height: 10000,
-      grassMask: 'open-map-grass',
-      sandMask: 'open-map-sand',
+      grassMask: 'editor-grass-mask',
+      sandMask: 'editor-sand-mask',
       flag: undefined,
       windmills: [],
       portals: [],
     };
     this.minY = this.mapData.height;
 
+    this.drawData = [];
     this.rtGrass = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
     this.rtSand = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
 
@@ -204,6 +206,24 @@ export class DrawScene extends Phaser.Scene {
 
   draw(pointer: Phaser.Input.Pointer): void {
     const points = pointer.getInterpolatedPosition(30);
+    const prevPositionCamera = this.cameras.main.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
+    const positionCamera = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const drawDataPoint: DrawData = {
+      color: this.colors[this.color],
+      size: this.size,
+      strokes: [
+        {
+          from: { x: Math.floor(prevPositionCamera.x), y: Math.floor(prevPositionCamera.y) },
+          to: { x: Math.floor(positionCamera.x), y: Math.floor(positionCamera.y) },
+        },
+      ],
+    };
+    const prevDrawData = this.drawData.length > 0 ? this.drawData[this.drawData.length - 1] : null;
+    if (prevDrawData?.color === this.colors[this.color] && prevDrawData?.size === this.size) {
+      prevDrawData.strokes.push(drawDataPoint.strokes[0]);
+    } else {
+      this.drawData.push(drawDataPoint);
+    }
 
     points
       .map((p) => this.cameras.main.getWorldPoint(p.x, p.y))
@@ -474,53 +494,22 @@ export class DrawScene extends Phaser.Scene {
   }
 
   async playTest(): Promise<void> {
-    const MAP_PADDING_TOP = 10;
-    const width = this.mapData.width;
-    const gameHeight = getGameHeight(this);
-    const topY = this.minY - MAP_PADDING_TOP;
-    const mapHeight = this.rtGrass.height - topY;
+    if (this.mapData.flag === undefined) {
+      alert('no hole');
+      return;
+    }
 
-    const snapshotMap = (rt: Phaser.GameObjects.RenderTexture): Promise<HTMLImageElement>[] => {
-      const arr: Promise<HTMLImageElement>[] = [];
-      for (let y = rt.height - gameHeight; y >= topY; y = Math.min(topY, y - gameHeight)) {
-        arr.push(
-          new Promise<HTMLImageElement>((resolve) => {
-            this.rtGrass.snapshotArea(0, y, width, gameHeight, (image: HTMLImageElement) => resolve(image));
-          }),
-        );
-      }
-      return arr;
-    };
-
-    const grassImgs = await Promise.all(snapshotMap(this.rtGrass));
-    grassImgs.forEach((o) => document.body.append(o));
-
-    /* const [grassImage, grassImage2, sandImage] = await Promise.all([
-      ,
-      new Promise<HTMLImageElement>((resolve) => {
-        this.rtGrass.snapshotArea(0, gameHeight + 1, width, gameHeight, (image: HTMLImageElement) => resolve(image));
-      }),
-      new Promise<HTMLImageElement>((resolve) => {
-        this.rtSand.snapshotArea(0, 0, this.mapData.width, this.mapData.height, (image: HTMLImageElement) =>
-          resolve(image),
-        );
-      }),
-    ]);
-    document.body.append(grassImage);
-    document.body.append(grassImage2);
-    this.mapData.grassMaskImage = grassImage;
-    this.mapData.sandMaskImage = sandImage; */
-    //this.scene.start('Game', this.mapData);
+    this.scene.start('Game', { ...this.mapData, drawData: this.drawData });
   }
 
-  update(): void {
-    this.windmills.forEach((windmill) => windmill.update());
+  update(time: number, delta: number): void {
+    this.windmills.forEach((windmill) => windmill.update(time, delta));
   }
 
   processScrollEvent(evt: Phaser.Input.Pointer): void {
     // SCROLL EVENT
     // NOTE - must use the actual mouse coords, not the camera-translated RealWorldPoint!!!
-    // if you use the translated point, after  the map moves the event Y is being changed bc its new relative map position!
+    // if you use the translated point, after the map moves the event Y is being changed bc its new relative map position!
     const camera = this.cameras.main;
 
     if (evt.id !== 1) {
@@ -538,6 +527,7 @@ export class DrawScene extends Phaser.Scene {
       if (Math.abs(deltaY) > 5) {
         console.log(`${this.prevPointerCoords.y} - ${evt.y} = ${deltaY}`);
         camera.scrollY += deltaY;
+        console.log(camera.scrollY);
         this.prevPointerCoords = { x: evt.x, y: evt.y };
       }
     }
@@ -545,6 +535,7 @@ export class DrawScene extends Phaser.Scene {
 
   processWheelEvent(deltaY: number): void {
     this.cameras.main.scrollY += deltaY * 0.5;
+    console.log(this.cameras.main.scrollY);
   }
 
   async checkScroll(): Promise<void> {
