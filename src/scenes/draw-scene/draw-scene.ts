@@ -146,22 +146,21 @@ export class DrawScene extends Phaser.Scene {
       this.draggingPortal = undefined;
       this.prevPointerCoords = undefined;
       pointerDownTime = undefined;
-      this.checkScroll();
     });
 
     this.input.on('wheel', (_pointer, _gameObjects, _deltaX, deltaY: number) => this.processWheelEvent(deltaY));
-
-    this.rtGrass.saveTexture(this.mapData.grassMask);
-    this.rtSand.saveTexture(this.mapData.sandMask);
-    this.map = new Map(this, this.mapData, true);
-    this.startCircle = new StartCircle(this);
-    this.startCircle.setActive(false);
 
     this.footerBg = this.add
       .image(0, getGameHeight(this), 'draw-footer-bg')
       .setOrigin(0, 1)
       .setScrollFactor(0, 0)
       .setDepth(config.layers.footer - 100);
+
+    this.rtGrass.saveTexture(this.mapData.grassMask);
+    this.rtSand.saveTexture(this.mapData.sandMask);
+    this.map = new Map(this, this.mapData, this.footerBg.height, true);
+    this.startCircle = new StartCircle(this);
+    this.startCircle.setActive(false);
 
     this.cameras.main.setBounds(0, 0, 0, this.mapData.height + this.footerBg.height);
     this.cameras.main.setScroll(0, this.mapData.height - getGameHeight(this) + this.footerBg.height);
@@ -589,11 +588,10 @@ export class DrawScene extends Phaser.Scene {
     console.log(this.cameras.main.scrollY);
   }
 
-  async checkScroll(): Promise<void> {
-    const camera = this.cameras.main;
-    // TODO NEED TO MAKE MAP BIGGER IF THEY ARE SCROLLING UP!
-    if (camera.scrollY < getGameHeight(this)) {
-      const addToHeight = getGameHeight(this) - camera.scrollY;
+  // async checkScroll(): Promise<void> {
+  //   const camera = this.cameras.main;
+  //   if (camera.scrollY < getGameHeight(this)) {
+  //     const addToHeight = getGameHeight(this) - camera.scrollY;
       /* this.mapData.height = this.mapData.height + addToHeight;
       this.mapData.windmills.map((o) => (o.y += addToHeight));
       this.mapData.portals.map((o) => {
@@ -621,6 +619,6 @@ export class DrawScene extends Phaser.Scene {
       this.rtSand.saveTexture(this.mapData.sandMask); */
       //this.rtGrass.setScale(1, this.rtGrass.scaleY + 1);
       //this.rtSand.setScale(1, this.rtGrass.scaleY + 1);
-    }
-  }
+  //   }
+  // }
 }

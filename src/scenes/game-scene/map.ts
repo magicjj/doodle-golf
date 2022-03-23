@@ -2,6 +2,7 @@ import { CloudSprite } from './cloud-sprite';
 import { WaterSprite } from './water-sprite';
 import config from '../../common/config';
 import { MapData, MapMasks, xy } from '../../common/types';
+import { getGameHeight } from '../../helpers';
 
 const FLAG_HITBOX_RADIUS = 30;
 const FLAG_X_OFFSET = 10;
@@ -33,10 +34,11 @@ export class Map extends Phaser.GameObjects.TileSprite {
   destroyables: any[] = [];
   positionables: any[] = [];
 
-  constructor(scene: Phaser.Scene, private mapData: MapData, private forEdit = false) {
+  constructor(scene: Phaser.Scene, private mapData: MapData, private footerHeight: number, private forEdit = false) {
     super(scene, 0, 0, mapData.width, mapData.height, 'grass-tile');
 
-
+    const gameHeight = getGameHeight(scene);
+    this.setY(Math.max(0, gameHeight - mapData.height - footerHeight));
     this.setOrigin(0, 0);
     this.setDepth(config.layers.grass);
     scene.add.existing(this);
@@ -49,10 +51,15 @@ export class Map extends Phaser.GameObjects.TileSprite {
       alert('invalid map');
     }
 
+    // scene.add.image(0, this.y, mapData.grassMask).setOrigin(0, 0).setDepth(3500).setVisible(true);
+
     const masks: MapMasks = {};
-    const grassMaskImage = scene.add.image(0, 0, mapData.grassMask).setOrigin(0, 0).setVisible(false);
-    const grassBaseMaskImage = scene.add.image(0, 20, mapData.grassMask).setOrigin(0, 0).setVisible(false);
-    const sandMaskImage = scene.add.image(0, 0, mapData.sandMask).setOrigin(0, 0).setVisible(false);
+    const grassMaskImage = scene.add.image(0, this.y, mapData.grassMask).setOrigin(0, 0).setVisible(false);
+    const grassBaseMaskImage = scene.add
+      .image(0, this.y + 20, mapData.grassMask)
+      .setOrigin(0, 0)
+      .setVisible(false);
+    const sandMaskImage = scene.add.image(0, this.y, mapData.sandMask).setOrigin(0, 0).setVisible(false);
     masks.grass = new Phaser.Display.Masks.BitmapMask(scene, grassMaskImage);
     masks.grassBase = new Phaser.Display.Masks.BitmapMask(scene, grassBaseMaskImage);
     masks.sand = new Phaser.Display.Masks.BitmapMask(scene, sandMaskImage);
@@ -64,7 +71,7 @@ export class Map extends Phaser.GameObjects.TileSprite {
 
     // add mask for sand
     this.sand = scene.add
-      .tileSprite(0, 0, mapData.width, mapData.height, 'sand-tile')
+      .tileSprite(0, this.y, mapData.width, mapData.height, 'sand-tile')
       .setMask(masks.sand)
       .setOrigin(0, 0)
       .setDepth(config.layers.sand);
@@ -75,7 +82,7 @@ export class Map extends Phaser.GameObjects.TileSprite {
     this.createGrassOutline();
 
     this.grassBase = scene.add
-      .tileSprite(0, 0, mapData.width, mapData.height, 'grass-base')
+      .tileSprite(0, this.y, mapData.width, mapData.height, 'grass-base')
       .setOrigin(0, 0)
       .setDepth(config.layers.grass - 2)
       .setMask(masks.grassBase);
@@ -85,7 +92,7 @@ export class Map extends Phaser.GameObjects.TileSprite {
     this.waterBg = scene.add
       .graphics()
       .fillStyle(config.colors.WATER, 1.0)
-      .fillRect(0, 0, mapData.width, mapData.height)
+      .fillRect(0, this.y, mapData.width, mapData.height)
       .setScrollFactor(0, 0)
       .setDepth(config.layers.water);
     this.destroyables.push(this.waterBg);
@@ -121,12 +128,14 @@ export class Map extends Phaser.GameObjects.TileSprite {
     if (!forEdit) {
       // add the flag and create a circle object that will be used as its hitbox
       this.destroyables.push(
-        scene.add.image(this.mapData.flag.x, this.invertY(this.mapData.flag.y), 'flag').setDepth(config.layers.items),
+        scene.add
+          .image(this.mapData.flag.x, this.y + this.invertY(this.mapData.flag.y), 'flag')
+          .setDepth(config.layers.items),
       );
       // we adjust the this.mapData.flag.x and FLAG_Y on the hitbox below a bit, so we position it closer to the hole, not the middle of the flag
       this.flagCircle = new Phaser.Geom.Circle(
         this.mapData.flag.x + FLAG_X_OFFSET,
-        this.invertY(this.mapData.flag.y) + FLAG_Y_OFFSET,
+        this.y + this.invertY(this.mapData.flag.y) + FLAG_Y_OFFSET,
         FLAG_HITBOX_RADIUS,
       );
     }
@@ -141,14 +150,14 @@ export class Map extends Phaser.GameObjects.TileSprite {
 
   createBrownGraphics(xOffset: number, yOffset: number): Phaser.GameObjects.Graphics {
     const brownMaskImage = this.scene.add
-      .image(xOffset, yOffset, this.mapData.grassMask)
+      .image(xOffset, this.y + yOffset, this.mapData.grassMask)
       .setOrigin(0, 0)
       .setVisible(false);
     const brownMask = new Phaser.Display.Masks.BitmapMask(this.scene, brownMaskImage);
     const ret = this.scene.add
       .graphics()
       .fillStyle(config.colors.LAND, 1.0)
-      .fillRect(0, 0, this.mapData.width, this.mapData.height)
+      .fillRect(0, this.y, this.mapData.width, this.mapData.height)
       .setDepth(config.layers.grass - 1)
       .setMask(brownMask);
     this.destroyables.push(brownMaskImage);
@@ -162,8 +171,6 @@ export class Map extends Phaser.GameObjects.TileSprite {
       return 'hole';
     }
 
-    // TODO location type is not working properly for rendered
-
     let grassMapPxAlpha;
     let sandMapPxAlpha;
 
@@ -171,25 +178,32 @@ export class Map extends Phaser.GameObjects.TileSprite {
       grassMapPxAlpha = this.scene.textures.getPixel(x, y, this.mapData.grassMask).alpha === 0 ? 0 : 1;
       sandMapPxAlpha = this.scene.textures.getPixel(x, y, this.mapData.sandMask).alpha === 0 ? 0 : 1;
     } else {
-      grassMapPxAlpha = (
-        await new Promise<any>((resolve) => {
-          this.renderTextures.grass.snapshotPixel(x, y, (color) => resolve(color));
-        })
-      ).a;
-      sandMapPxAlpha = (
-        await new Promise<any>((resolve) => {
-          this.renderTextures.sand.snapshotPixel(x, y, (color) => resolve(color));
-        })
-      ).a;
+      const localpoint = this.renderTextures.sand.getLocalPoint(x, y);
+      if (localpoint.y < 0) {
+        grassMapPxAlpha = 0;
+        sandMapPxAlpha = 0;
+      } else {
+        grassMapPxAlpha = (
+          await new Promise<any>((resolve) =>
+            this.renderTextures.grass.snapshotPixel(localpoint.x, this.invertY(localpoint.y), (color) =>
+              resolve(color),
+            ),
+          )
+        ).a;
+        sandMapPxAlpha = (
+          await new Promise<any>((resolve) =>
+            this.renderTextures.sand.snapshotPixel(localpoint.x, this.invertY(localpoint.y), (color) => resolve(color)),
+          )
+        ).a;
+      }
     }
-
-    console.log(grassMapPxAlpha, sandMapPxAlpha);
 
     if (sandMapPxAlpha === 1) {
       return 'sand';
     }
 
     if (grassMapPxAlpha === 1) {
+      // this.scene.add.rectangle(x, y, 5, 5, 0x000000).setDepth(3900);
       return 'grass';
     }
 
@@ -239,8 +253,8 @@ export class Map extends Phaser.GameObjects.TileSprite {
   renderTextures: { grass: Phaser.GameObjects.RenderTexture; sand: Phaser.GameObjects.RenderTexture };
   buildMasksFromDrawData(): void {
     this.renderTextures = {
-      grass: this.scene.add.renderTexture(0, 0, this.mapData.width, this.mapData.height),
-      sand: this.scene.add.renderTexture(0, 0, this.mapData.width, this.mapData.height),
+      grass: this.scene.add.renderTexture(0, this.y, this.mapData.width, this.mapData.height).setOrigin(0, 0),
+      sand: this.scene.add.renderTexture(0, this.y, this.mapData.width, this.mapData.height).setOrigin(0, 0),
     };
     this.mapData.drawData.forEach((drawData) => {
       this.brush = this.scene.add
@@ -303,6 +317,6 @@ export class Map extends Phaser.GameObjects.TileSprite {
   }
 
   invertY(y: number): number {
-    return this.mapData.height - y;
+    return this.height - y;
   }
 }

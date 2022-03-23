@@ -15,7 +15,7 @@ export class StartCircle extends Phaser.GameObjects.Sprite implements Updateable
   hilight = true;
 
   constructor(public scene: GameScene | DrawScene) {
-    super(scene, getGameWidth(scene) / 2, scene.map.height - START_CIRCLE_RADIUS, 'tee');
+    super(scene, getGameWidth(scene) / 2, scene.map.height + scene.map.y - START_CIRCLE_RADIUS, 'tee');
     scene.add.existing(this);
     this.setDepth(config.layers.startCircle);
   }

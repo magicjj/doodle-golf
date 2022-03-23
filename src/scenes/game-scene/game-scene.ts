@@ -77,13 +77,13 @@ export class GameScene extends Phaser.Scene {
       this.mapData = MAP_DATA;
     }
 
-    this.map = new Map(this, this.mapData);
+    this.footer = new Footer(this, this.mapData.title, this.mapData.subtitle);
+
+    this.map = new Map(this, this.mapData, this.footer.height);
 
     this.startCircle = new StartCircle(this);
 
     this.cloudCover = new CloudCover(this);
-
-    this.footer = new Footer(this, this.mapData.title, this.mapData.subtitle);
 
     const startSprite = this.add
       .sprite(-700, getGameHeight(this) / 2, 'start')
@@ -406,6 +406,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   invertY(y: number): number {
-    return this.mapData.height - y;
+    return this.map.y + this.mapData.height - y;
   }
 }
