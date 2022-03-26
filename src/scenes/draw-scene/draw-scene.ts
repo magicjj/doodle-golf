@@ -73,7 +73,6 @@ export class DrawScene extends Phaser.Scene {
       title: 'Play Test',
       subtitle: 'Make the goal to publish.',
       width: 750,
-      //height: getGameHeight(this) * 2,
       height: 10000,
       grassMask: 'editor-grass-mask',
       sandMask: 'editor-sand-mask',
@@ -442,7 +441,6 @@ export class DrawScene extends Phaser.Scene {
     };
 
     this.setPortals();
-    // console.log(this.mapData.portals);
   }
 
   setPortals(): void {
@@ -532,27 +530,13 @@ export class DrawScene extends Phaser.Scene {
       }
     });
     if (this.mapData.flag) {
-      mapHeight = Math.max(mapHeight, this.mapData.flag.y + this.flag.height);
+      mapHeight = Math.max(mapHeight, this.mapData.flag.y + this.flag.height / 2);
     }
-    this.mapData.windmills.forEach((coords) => (mapHeight = Math.max(mapHeight, coords.y)));
+    this.mapData.windmills.forEach(
+      (coords, i) => (mapHeight = Math.max(mapHeight, coords.y + this.windmills[i].fan.height / 2)),
+    );
 
-    // TODO at some point, may want to scan to get a more accurate map height... for instance what if they draw something at top then erase it...
-    // for (let y = 0; y < this.invertY(mapHeight); y += 15) {
-    //   const snapshotPromises = [];
-    //   for (let x = 0; x < this.mapData.width; x++) {
-    //     snapshotPromises.push(new Promise<any>((resolve) =>
-    //       this.rtGrass.snapshotPixel(x, y, (px: Phaser.Display.Color) => resolve(px.alpha))
-    //     ));
-    //     snapshotPromises.push(new Promise<any>((resolve) =>
-    //       this.rtSand.snapshotPixel(x, y, (px: Phaser.Display.Color) => resolve(px.alpha))
-    //     ));
-    //   }
-    //   const snapshotsForRow = await Promise.all(snapshotPromises);
-    //   if (snapshotsForRow.some(x => x === 1)) {
-    //     mapHeight = this.invertY(y);
-    //     break;
-    //   }
-    // }
+    // TODO at some point, may want to scan to get a more accurate map height... see scratch/getMapHeight.ts
 
     return mapHeight + TOP_OF_MAP_BUFFER;
   }
@@ -593,37 +577,5 @@ export class DrawScene extends Phaser.Scene {
     console.log(this.cameras.main.scrollY);
   }
 
-  // async checkScroll(): Promise<void> {
-  //   const camera = this.cameras.main;
-  //   if (camera.scrollY < getGameHeight(this)) {
-  //     const addToHeight = getGameHeight(this) - camera.scrollY;
-  /* this.mapData.height = this.mapData.height + addToHeight;
-      this.mapData.windmills.map((o) => (o.y += addToHeight));
-      this.mapData.portals.map((o) => {
-        if (o.a) o.a.y += addToHeight;
-        if (o.b) o.b.y += addToHeight;
-      });
-      this.map.addToHeight(addToHeight);
-      camera.scrollY = getGameHeight(this); */
-  /* 
-      const [grassImage, sandImage] = await Promise.all([
-        new Promise<HTMLImageElement>((resolve) => {
-          this.rtGrass.snapshot((image: HTMLImageElement) => resolve(image));
-        }),
-        new Promise<HTMLImageElement>((resolve) => {
-          this.rtSand.snapshot((image: HTMLImageElement) => resolve(image));
-        }),
-      ]);
-      this.rtGrass = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
-      this.rtSand = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
-      this.rtGrass.draw(grassImage, 0, addToHeight);
-      this.rtSand.draw(sandImage, 0, addToHeight);
-      this.textures.get(this.mapData.grassMask).destroy();
-      this.textures.get(this.mapData.sandMask).destroy();
-      this.rtGrass.saveTexture(this.mapData.grassMask);
-      this.rtSand.saveTexture(this.mapData.sandMask); */
-  //this.rtGrass.setScale(1, this.rtGrass.scaleY + 1);
-  //this.rtSand.setScale(1, this.rtGrass.scaleY + 1);
-  //   }
-  // }
+  // TODO was looking into resizing map on scroll... for now, just using static height 10,000 px map. see scratch/resizeMapOnScroll.ts
 }
