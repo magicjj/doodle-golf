@@ -8,6 +8,8 @@ import { StartCircle } from '../game-scene/start-circle';
 import { Windmill } from '../game-scene/windmill';
 import { Portal } from '../game-scene/portal';
 
+const TOP_OF_MAP_BUFFER = 50;
+
 const sceneConfig: Phaser.Types.Scenes.SettingsConfig = {
   active: false,
   visible: false,
@@ -201,7 +203,7 @@ export class DrawScene extends Phaser.Scene {
     const points = pointer.getInterpolatedPosition(30);
     const prevPositionCamera = this.cameras.main.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
     const positionCamera = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    
+
     const drawDataPoint: DrawData = {
       color: this.colors[this.color],
       size: this.size,
@@ -237,9 +239,12 @@ export class DrawScene extends Phaser.Scene {
     }
 
     if (drawLayers.length > 0) {
-      this.highestDrawnY = Math.max(this.highestDrawnY, this.invertY(Math.floor(positionCamera.y)) + BRUSH_RADIUS_ARR[this.size]);
+      this.highestDrawnY = Math.max(
+        this.highestDrawnY,
+        this.invertY(Math.floor(positionCamera.y)) + BRUSH_RADIUS_ARR[this.size],
+      );
     }
-    
+
     points
       .map((p) => this.cameras.main.getWorldPoint(p.x, p.y))
       .forEach((p) => {
@@ -454,7 +459,7 @@ export class DrawScene extends Phaser.Scene {
       const invertedPortalCoords = {
         a: portalCoords.a ? { x: portalCoords.a.x, y: this.invertY(portalCoords.a.y) } : undefined,
         b: portalCoords.b ? { x: portalCoords.b.x, y: this.invertY(portalCoords.b.y) } : undefined,
-      }
+      };
       const portals: { a?: Portal; b?: Portal } = {};
       if (invertedPortalCoords.a) {
         portals.a = new Portal(this, invertedPortalCoords.a, invertedPortalCoords.b);
@@ -518,7 +523,7 @@ export class DrawScene extends Phaser.Scene {
   getMapHeight() {
     let mapHeight = this.highestDrawnY;
 
-    this.mapData.portals.forEach(portalPair => {
+    this.mapData.portals.forEach((portalPair) => {
       if (portalPair.a) {
         mapHeight = Math.max(mapHeight, portalPair.a.y);
       }
@@ -527,18 +532,18 @@ export class DrawScene extends Phaser.Scene {
       }
     });
     if (this.mapData.flag) {
-      mapHeight = Math.max(mapHeight, this.mapData.flag.y);
+      mapHeight = Math.max(mapHeight, this.mapData.flag.y + this.flag.height);
     }
-    this.mapData.windmills.forEach(coords => mapHeight = Math.max(mapHeight, coords.y));
+    this.mapData.windmills.forEach((coords) => (mapHeight = Math.max(mapHeight, coords.y)));
 
-    // TODO at some point, may want to scan to get a more accurate map height... for instance what if they draw something at top then erase it... 
+    // TODO at some point, may want to scan to get a more accurate map height... for instance what if they draw something at top then erase it...
     // for (let y = 0; y < this.invertY(mapHeight); y += 15) {
     //   const snapshotPromises = [];
     //   for (let x = 0; x < this.mapData.width; x++) {
-    //     snapshotPromises.push(new Promise<any>((resolve) => 
+    //     snapshotPromises.push(new Promise<any>((resolve) =>
     //       this.rtGrass.snapshotPixel(x, y, (px: Phaser.Display.Color) => resolve(px.alpha))
     //     ));
-    //     snapshotPromises.push(new Promise<any>((resolve) => 
+    //     snapshotPromises.push(new Promise<any>((resolve) =>
     //       this.rtSand.snapshotPixel(x, y, (px: Phaser.Display.Color) => resolve(px.alpha))
     //     ));
     //   }
@@ -549,7 +554,7 @@ export class DrawScene extends Phaser.Scene {
     //   }
     // }
 
-    return mapHeight;
+    return mapHeight + TOP_OF_MAP_BUFFER;
   }
 
   update(time: number, delta: number): void {
@@ -592,7 +597,7 @@ export class DrawScene extends Phaser.Scene {
   //   const camera = this.cameras.main;
   //   if (camera.scrollY < getGameHeight(this)) {
   //     const addToHeight = getGameHeight(this) - camera.scrollY;
-      /* this.mapData.height = this.mapData.height + addToHeight;
+  /* this.mapData.height = this.mapData.height + addToHeight;
       this.mapData.windmills.map((o) => (o.y += addToHeight));
       this.mapData.portals.map((o) => {
         if (o.a) o.a.y += addToHeight;
@@ -600,7 +605,7 @@ export class DrawScene extends Phaser.Scene {
       });
       this.map.addToHeight(addToHeight);
       camera.scrollY = getGameHeight(this); */
-      /* 
+  /* 
       const [grassImage, sandImage] = await Promise.all([
         new Promise<HTMLImageElement>((resolve) => {
           this.rtGrass.snapshot((image: HTMLImageElement) => resolve(image));
@@ -617,8 +622,8 @@ export class DrawScene extends Phaser.Scene {
       this.textures.get(this.mapData.sandMask).destroy();
       this.rtGrass.saveTexture(this.mapData.grassMask);
       this.rtSand.saveTexture(this.mapData.sandMask); */
-      //this.rtGrass.setScale(1, this.rtGrass.scaleY + 1);
-      //this.rtSand.setScale(1, this.rtGrass.scaleY + 1);
+  //this.rtGrass.setScale(1, this.rtGrass.scaleY + 1);
+  //this.rtSand.setScale(1, this.rtGrass.scaleY + 1);
   //   }
   // }
 }

@@ -24,7 +24,7 @@ export class Footer extends Phaser.GameObjects.Image {
     const subtitleY = titleY + 30;
     this.title = this.scene.add
       .text(titleX, titleY, title, {
-        fill: '#000000',
+        color: '#000000',
         fontFamily: 'Calibri, Arial, sans',
       })
       .setOrigin(0, 1)
@@ -34,7 +34,7 @@ export class Footer extends Phaser.GameObjects.Image {
 
     this.subtitle = this.scene.add
       .text(titleX, subtitleY, subtitle, {
-        fill: '#000000',
+        color: '#000000',
         fontFamily: 'Calibri, Arial, sans',
       })
       .setOrigin(0, 1)
@@ -47,7 +47,7 @@ export class Footer extends Phaser.GameObjects.Image {
     const strokeX = timeX + 180;
     this.time = this.scene.add
       .text(timeX, timeY, '00.0', {
-        fill: '#000000',
+        color: '#000000',
         fontFamily: 'Calibri, Arial, sans',
       })
       .setOrigin(0.5, 1)
@@ -57,7 +57,7 @@ export class Footer extends Phaser.GameObjects.Image {
 
     this.stroke = this.scene.add
       .text(strokeX, timeY, '1', {
-        fill: '#000000',
+        color: '#000000',
         fontFamily: 'Calibri, Arial, sans',
       })
       .setOrigin(0.5, 1)
