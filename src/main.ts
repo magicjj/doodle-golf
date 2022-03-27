@@ -2,8 +2,6 @@ import * as Phaser from 'phaser';
 import Scenes from './scenes';
 import config from './common/config';
 
-//let gameWidth = window.innerWidth;
-//const gameHeight = window.innerHeight;
 let ratio = window.innerHeight / window.innerWidth;
 const minRatio = 1.5;
 if (ratio < minRatio) {
@@ -17,8 +15,6 @@ const gameConfig: Phaser.Types.Core.GameConfig = {
   height: Math.ceil(750 * ratio),
 
   scale: {
-    //width: window.innerWidth,
-    //height: window.innerHeight,
     mode: Phaser.Scale.FIT,
   },
 
@@ -46,13 +42,14 @@ window.addEventListener('load', () => {
 });
 
 async function registerSW() {
-  if ('serviceWorker' in navigator) {
-    try {
-      await navigator.serviceWorker.register('./sw.js');
-    } catch (e) {
-      //alert('ServiceWorker registration failed. Sorry about that.');
-    }
-  } else {
-    document.querySelector('.alert').removeAttribute('hidden');
-  }
+  // TODO
+  // if ('serviceWorker' in navigator) {
+  //   try {
+  //     await navigator.serviceWorker.register('./sw.js');
+  //   } catch (e) {
+  //     alert('ServiceWorker registration failed. Sorry about that.');
+  //   }
+  // } else {
+  //   document.querySelector('.alert').removeAttribute('hidden');
+  // }
 }

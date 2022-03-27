@@ -145,7 +145,7 @@ export class GameScene extends Phaser.Scene {
       const invertedPortalCoords = {
         a: portalCoords.a ? { x: portalCoords.a.x, y: this.invertY(portalCoords.a.y) } : undefined,
         b: portalCoords.b ? { x: portalCoords.b.x, y: this.invertY(portalCoords.b.y) } : undefined,
-      }
+      };
       if (invertedPortalCoords.a === undefined || invertedPortalCoords.b === undefined) {
         return;
       }
@@ -252,6 +252,19 @@ export class GameScene extends Phaser.Scene {
       .sprite(Math.floor(getGameWidth(this) / 2), Math.floor(getGameHeight(this) / 2), 'goal')
       .setScrollFactor(0, 0)
       .setDepth(config.layers.cloudCover + 1); // adding 1 so it goes over windmills
+    if (this.mapData.drawData) {
+      this.add
+        .text(10, 10, 'SEND IT', {
+          font: 'bold 65px Arial',
+          color: '#000000',
+          align: 'center',
+        })
+        .setInteractive()
+        .addListener('pointerup', () => {
+          const link = 'mailto:magicjj2@gmail.com&subject=My DoodleGolf Map&body=' + JSON.stringify(this.mapData);
+          window.location.href = link;
+        });
+    }
   }
 
   public update(time: number, delta: number): void {

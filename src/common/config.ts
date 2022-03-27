@@ -9,7 +9,13 @@ export default {
     cloudCover: 2000,
     footer: 3000,
   },
+  brushColorKeys: {
+    GRASS: 'draw-grass',
+    WATER: 'draw-water',
+    SAND: 'draw-sand',
+  },
   colors: {
+    BLACK: 0x000000,
     PROGRESS_BAR_BG: 0x000000,
     PROGRESS_BAR_FILL: 0x888888,
     WATER: 0x03d1f2,

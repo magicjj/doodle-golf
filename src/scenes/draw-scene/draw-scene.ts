@@ -16,11 +16,6 @@ const sceneConfig: Phaser.Types.Scenes.SettingsConfig = {
   key: 'Draw',
 };
 
-const BLACK_COLOR = 0x000000;
-const BRUSH_RADIUS_SM = 30;
-const BRUSH_RADIUS_MD = 60;
-const BRUSH_RADIUS_LG = 90;
-const BRUSH_RADIUS_ARR = [BRUSH_RADIUS_SM, BRUSH_RADIUS_MD, BRUSH_RADIUS_LG];
 const PLAY_BUTTON_FROM_RIGHT = 183 + 20; //play btn is 183 px high, 20px padding from right
 const PORTAL_COLOR_INDICATORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xcc00ff, 0xff6600];
 
@@ -30,21 +25,13 @@ const PORTAL_COLOR_INDICATORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xcc00f
 export class DrawScene extends Phaser.Scene {
   mapData: MapData;
   drawData: DrawData[];
-  rtGrass: Phaser.GameObjects.RenderTexture;
-  rtSand: Phaser.GameObjects.RenderTexture;
-  brush: Phaser.GameObjects.Graphics;
-  brushCircle = [
-    new Phaser.Geom.Circle(BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM),
-    new Phaser.Geom.Circle(BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD),
-    new Phaser.Geom.Circle(BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG),
-  ];
   map: Map;
   startCircle: StartCircle;
   size = 1; // 0 small, 1 med, 2 lg
   sizeTool: Tool;
   colorTool: Tool;
   color = 0;
-  colors = ['draw-grass', 'draw-sand', 'draw-water'];
+  colors = [config.brushColorKeys.GRASS, config.brushColorKeys.SAND, config.brushColorKeys.WATER];
   footerBg: Phaser.GameObjects.Image;
   draggingObject: Phaser.GameObjects.Image;
   windmills: Windmill[] = [];
@@ -79,17 +66,10 @@ export class DrawScene extends Phaser.Scene {
       flag: undefined,
       windmills: [],
       portals: [],
+      drawData: [],
     };
 
     this.drawData = [];
-    this.rtGrass = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
-    this.rtSand = this.add.renderTexture(0, 0, this.mapData.width, this.mapData.height).setVisible(false);
-
-    this.brush = this.add
-      .graphics()
-      .fillStyle(BLACK_COLOR, 1)
-      .fillCircleShape(this.brushCircle[this.size])
-      .setVisible(false);
 
     // The pointer delay is to help with the scrolling. Before this, every time you scrolled
     // a circle would get drawn under one of your fingers. To remedy, we give a short delay
@@ -157,8 +137,6 @@ export class DrawScene extends Phaser.Scene {
       .setScrollFactor(0, 0)
       .setDepth(config.layers.footer - 100);
 
-    this.rtGrass.saveTexture(this.mapData.grassMask);
-    this.rtSand.saveTexture(this.mapData.sandMask);
     this.map = new Map(this, this.mapData, this.footerBg.height, true);
     this.startCircle = new StartCircle(this);
     this.startCircle.setActive(false);
@@ -199,7 +177,6 @@ export class DrawScene extends Phaser.Scene {
 
   highestDrawnY = 0;
   draw(pointer: Phaser.Input.Pointer): void {
-    const points = pointer.getInterpolatedPosition(30);
     const prevPositionCamera = this.cameras.main.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
     const positionCamera = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
 
@@ -220,52 +197,14 @@ export class DrawScene extends Phaser.Scene {
       this.drawData.push(drawDataPoint);
     }
 
-    const drawLayers = [];
-    const eraseLayers = [];
-    switch (this.colors[this.color]) {
-      case 'draw-grass':
-        drawLayers.push(this.rtGrass);
-        eraseLayers.push(this.rtSand);
-        break;
-      case 'draw-sand':
-        drawLayers.push(this.rtGrass);
-        drawLayers.push(this.rtSand);
-        break;
-      case 'draw-water':
-        eraseLayers.push(this.rtGrass);
-        eraseLayers.push(this.rtSand);
-        break;
-    }
-
-    if (drawLayers.length > 0) {
+    if (this.map.getBrushLayersByColor(drawDataPoint.color).drawLayers.length > 0) {
       this.highestDrawnY = Math.max(
         this.highestDrawnY,
-        this.invertY(Math.floor(positionCamera.y)) + BRUSH_RADIUS_ARR[this.size],
+        this.invertY(Math.floor(positionCamera.y)) + this.map.getBrushRadiusBySize(drawDataPoint.size),
       );
     }
 
-    points
-      .map((p) => this.cameras.main.getWorldPoint(p.x, p.y))
-      .forEach((p) => {
-        drawLayers.forEach((texture) =>
-          texture.draw(
-            this.brush,
-            p.x - BRUSH_RADIUS_ARR[this.size] / 2,
-            p.y - BRUSH_RADIUS_ARR[this.size] / 2,
-            1,
-            BLACK_COLOR,
-          ),
-        );
-        eraseLayers.forEach((texture) =>
-          texture.erase(
-            this.brush,
-            p.x - BRUSH_RADIUS_ARR[this.size] / 2,
-            p.y - BRUSH_RADIUS_ARR[this.size] / 2,
-            1,
-            BLACK_COLOR,
-          ),
-        );
-      });
+    this.map.processDrawData(drawDataPoint);
   }
 
   isInDrawBounds(coords: xy): boolean {
@@ -287,12 +226,6 @@ export class DrawScene extends Phaser.Scene {
         break;
     }
     this.sizeTool.setTexture(texture);
-    this.brush.destroy();
-    this.brush = this.add
-      .graphics()
-      .fillStyle(BLACK_COLOR, 1)
-      .fillCircleShape(this.brushCircle[this.size])
-      .setVisible(false);
   }
 
   colorToolTouchEvent(): void {
@@ -300,13 +233,13 @@ export class DrawScene extends Phaser.Scene {
     let texture;
     switch (this.color) {
       case 0:
-        texture = 'draw-grass';
+        texture = config.brushColorKeys.GRASS;
         break;
       case 1:
-        texture = 'draw-sand';
+        texture = config.brushColorKeys.SAND;
         break;
       case 2:
-        texture = 'draw-water';
+        texture = config.brushColorKeys.WATER;
         break;
     }
     this.colorTool.setTexture(texture);
@@ -361,7 +294,7 @@ export class DrawScene extends Phaser.Scene {
     }
   }
 
-  invertY(y: number) {
+  invertY(y: number): number {
     return this.mapData.height - y;
   }
 
@@ -518,7 +451,7 @@ export class DrawScene extends Phaser.Scene {
     this.scene.start('Game', newMapData);
   }
 
-  getMapHeight() {
+  getMapHeight(): number {
     let mapHeight = this.highestDrawnY;
 
     this.mapData.portals.forEach((portalPair) => {

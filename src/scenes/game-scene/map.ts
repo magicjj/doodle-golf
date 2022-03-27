@@ -1,7 +1,7 @@
 import { CloudSprite } from './cloud-sprite';
 import { WaterSprite } from './water-sprite';
 import config from '../../common/config';
-import { MapData, MapMasks, xy } from '../../common/types';
+import { BrushLayers, DrawData, MapData, MapMasks, xy } from '../../common/types';
 import { getGameHeight } from '../../helpers';
 
 const FLAG_HITBOX_RADIUS = 30;
@@ -9,19 +9,22 @@ const FLAG_X_OFFSET = 10;
 const FLAG_Y_OFFSET = 50;
 
 // TODO this stuff and COLORS and other draw logic should be centralized, currently stuff duplicated here and in draw-scene
-const BLACK_COLOR = 0x000000;
 const BRUSH_RADIUS_SM = 30;
 const BRUSH_RADIUS_MD = 60;
 const BRUSH_RADIUS_LG = 90;
 const BRUSH_RADIUS_ARR = [BRUSH_RADIUS_SM, BRUSH_RADIUS_MD, BRUSH_RADIUS_LG];
+const BRUSH_CIRCLES = [
+  new Phaser.Geom.Circle(BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM),
+  new Phaser.Geom.Circle(BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD),
+  new Phaser.Geom.Circle(BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG),
+];
 
 export class Map extends Phaser.GameObjects.TileSprite {
-  brush: Phaser.GameObjects.Graphics;
-  brushCircle = [
-    new Phaser.Geom.Circle(BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM / 2, BRUSH_RADIUS_SM),
-    new Phaser.Geom.Circle(BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD / 2, BRUSH_RADIUS_MD),
-    new Phaser.Geom.Circle(BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG / 2, BRUSH_RADIUS_LG),
-  ];
+  private brushes: Phaser.GameObjects.Graphics[];
+  brushLayers: {
+    [color: string]: BrushLayers;
+  };
+  renderTextures: { grass: Phaser.GameObjects.RenderTexture; sand: Phaser.GameObjects.RenderTexture };
 
   waterBg: Phaser.GameObjects.Graphics;
   brownT: Phaser.GameObjects.Graphics;
@@ -250,70 +253,82 @@ export class Map extends Phaser.GameObjects.TileSprite {
     return out;
   }
 
-  renderTextures: { grass: Phaser.GameObjects.RenderTexture; sand: Phaser.GameObjects.RenderTexture };
+  getBrushes(): Phaser.GameObjects.Graphics[] {
+    if (!this.brushes) {
+      this.brushes = BRUSH_CIRCLES.map((circleForBrushSize) =>
+        this.scene.add
+          .graphics()
+          .fillStyle(config.colors.BLACK, 1)
+          .fillCircleShape(circleForBrushSize)
+          .setVisible(false),
+      );
+    }
+    return this.brushes;
+  }
+
   buildMasksFromDrawData(): void {
     this.renderTextures = {
       grass: this.scene.add.renderTexture(0, this.y, this.mapData.width, this.mapData.height).setOrigin(0, 0),
       sand: this.scene.add.renderTexture(0, this.y, this.mapData.width, this.mapData.height).setOrigin(0, 0),
     };
-    this.mapData.drawData.forEach((drawData) => {
-      this.brush = this.scene.add
-        .graphics()
-        .fillStyle(BLACK_COLOR, 1)
-        .fillCircleShape(this.brushCircle[drawData.size])
-        .setVisible(false);
-
-      const drawLayers = [];
-      const eraseLayers = [];
-      switch (drawData.color) {
-        case 'draw-grass':
-          drawLayers.push(this.renderTextures.grass);
-          eraseLayers.push(this.renderTextures.sand);
-          break;
-        case 'draw-sand':
-          drawLayers.push(this.renderTextures.grass);
-          drawLayers.push(this.renderTextures.sand);
-          break;
-        case 'draw-water':
-          eraseLayers.push(this.renderTextures.grass);
-          eraseLayers.push(this.renderTextures.sand);
-          break;
-      }
-
-      drawData.strokes.forEach((stroke) => {
-        const invertedStroke = {
-          from: { x: stroke.from.x, y: this.invertY(stroke.from.y) },
-          to: { x: stroke.to.x, y: this.invertY(stroke.to.y) },
-        };
-        const points = this.getInterpolatedPosition(invertedStroke.from, invertedStroke.to, 30);
-        points.forEach((p) => {
-          drawLayers.forEach((texture) => {
-            texture.draw(
-              this.brush,
-              p.x - BRUSH_RADIUS_ARR[drawData.size] / 2,
-              p.y - BRUSH_RADIUS_ARR[drawData.size] / 2,
-              1,
-              BLACK_COLOR,
-            );
-          });
-          eraseLayers.forEach((texture) =>
-            texture.erase(
-              this.brush,
-              p.x - BRUSH_RADIUS_ARR[drawData.size] / 2,
-              p.y - BRUSH_RADIUS_ARR[drawData.size] / 2,
-              1,
-              BLACK_COLOR,
-            ),
-          );
-        });
-      });
-    });
+    this.mapData.drawData.forEach((drawData) => this.processDrawData(drawData));
 
     this.mapData.grassMask = 'grass-render-texture';
     this.mapData.sandMask = 'sand-render-texture';
 
     this.renderTextures.grass.saveTexture(this.mapData.grassMask);
     this.renderTextures.sand.saveTexture(this.mapData.sandMask);
+  }
+
+  getBrushLayersByColor(color: string): BrushLayers {
+    if (!this.brushLayers) {
+      this.brushLayers = {
+        [config.brushColorKeys.GRASS]: {
+          drawLayers: [this.renderTextures.grass],
+          eraseLayers: [this.renderTextures.sand],
+        },
+        [config.brushColorKeys.SAND]: {
+          drawLayers: [this.renderTextures.sand],
+          eraseLayers: [this.renderTextures.grass],
+        },
+        [config.brushColorKeys.WATER]: {
+          drawLayers: [],
+          eraseLayers: [this.renderTextures.grass, this.renderTextures.sand],
+        },
+      };
+    }
+    return this.brushLayers[color];
+  }
+
+  getBrushRadiusBySize(size: number): number {
+    return BRUSH_RADIUS_ARR[size];
+  }
+
+  processDrawData(drawData: DrawData): void {
+    const brush = this.getBrushes()[drawData.size];
+    const brushLayers = this.getBrushLayersByColor(drawData.color);
+
+    drawData.strokes.forEach((stroke) => {
+      const invertedStroke = {
+        from: { x: stroke.from.x, y: this.invertY(stroke.from.y + this.y) },
+        to: { x: stroke.to.x, y: this.invertY(stroke.to.y + this.y) },
+      };
+      const points = this.getInterpolatedPosition(invertedStroke.from, invertedStroke.to, 30);
+      points.forEach((p) => {
+        brushLayers.drawLayers.forEach((texture) => {
+          texture.draw(
+            brush,
+            p.x - BRUSH_RADIUS_ARR[drawData.size] / 2,
+            p.y - BRUSH_RADIUS_ARR[drawData.size] / 2,
+            1,
+            config.colors.BLACK,
+          );
+        });
+        brushLayers.eraseLayers.forEach((texture) =>
+          texture.erase(brush, p.x - BRUSH_RADIUS_ARR[drawData.size] / 2, p.y - BRUSH_RADIUS_ARR[drawData.size] / 2),
+        );
+      });
+    });
   }
 
   invertY(y: number): number {

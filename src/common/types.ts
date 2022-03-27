@@ -29,3 +29,8 @@ export interface MapMasks {
   grassBase?: Phaser.Display.Masks.BitmapMask;
   sand?: Phaser.Display.Masks.BitmapMask;
 }
+
+export interface BrushLayers {
+  drawLayers: Phaser.GameObjects.RenderTexture[];
+  eraseLayers: Phaser.GameObjects.RenderTexture[];
+}

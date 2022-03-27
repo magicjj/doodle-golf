@@ -24,7 +24,7 @@ export class MainMenuScene extends Phaser.Scene {
     const golfBtn = new MenuButton(this, btnX, btnY, 'golf-btn', () => {
       this.scene.start('Game');
     });
-    
+
     const doodleBtn = new MenuButton(this, btnX, btnY + golfBtn.displayHeight + 20, 'doodle-btn', () => {
       this.scene.start('Draw');
     });
